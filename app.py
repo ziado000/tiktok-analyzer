@@ -5,9 +5,9 @@ import plotly.express as px
 import time
 
 # --- 1. إعدادات الصفحة والتصميم الاحترافي (CSS) ---
-# (نفس الستايل اللي أرسلته لي بالضبط)
 st.set_page_config(page_title="TikTok Campaign Pro Dashboard", layout="wide", page_icon="🚀")
 
+# حقن CSS لتخصيص المظهر وجعله احترافياً (بطاقات، ظلال، زوايا دائرية للحاويات)
 st.markdown("""
 <style>
     /* خلفية الصفحة */
@@ -16,7 +16,7 @@ st.markdown("""
     }
     
     /* تصميم البطاقات (Cards) */
-    .css-1r6slb0, .stDataFrame, .stDataEditor, .plotly-graph-div {
+    .css-1r6slb0, .stDataFrame, .plotly-graph-div {
         background-color: #ffffff;
         border-radius: 20px; /* زوايا دائرية للحاويات */
         padding: 25px;
@@ -53,32 +53,21 @@ st.markdown("""
         color: #666;
         margin-top: 5px;
     }
-    
-    /* تنسيق أزرار الإضافة والحذف */
-    div.stButton > button {
-        border-radius: 8px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- إضافة: إدارة الروابط (Session State) ---
-if 'input_links' not in st.session_state:
-    st.session_state['input_links'] = [""]
-
-def add_link():
-    st.session_state['input_links'].append("")
-
-def remove_link(index):
-    st.session_state['input_links'].pop(index)
-
-# --- 2. دالة سحب البيانات ---
+# --- 2. دالة سحب البيانات (محدثة لسحب المتابعين واللايكات) ---
 @st.cache_data(show_spinner=False)
 def get_tiktok_data(urls):
     ydl_opts = {
-        'quiet': True, 'skip_download': True, 'no_warnings': True, 'ignoreerrors': True,
+        'quiet': True,
+        'skip_download': True,
+        'no_warnings': True,
+        'ignoreerrors': True,
     }
     
     data = []
+    # عناصر واجهة التحميل
     loading_container = st.empty()
     with loading_container.container():
         st.markdown("### 🔄 جاري الاتصال بمنصة TikTok...")
@@ -91,16 +80,15 @@ def get_tiktok_data(urls):
             progress_bar.progress(progress)
             status_text.info(f"تحليل الرابط {i+1} من {len(urls)}: {url[:30]}...")
             
-            if not url.strip(): continue
-
             try:
                 info = ydl.extract_info(url, download=False)
                 if info:
+                    # محاولة سحب البيانات الإضافية
                     display_name = info.get('uploader', info.get('uploader_id', 'Unknown'))
-                    followers = info.get('channel_follower_count', 0)
-                    likes = info.get('like_count', 0)
-                    shares = info.get('repost_count', 0)
-                    avatar = info.get('uploader_url', '')
+                    followers = info.get('channel_follower_count', 0) # سحب عدد المتابعين
+                    likes = info.get('like_count', 0) # سحب عدد اللايكات
+                    shares = info.get('repost_count', 0) # سحب عدد المشاركات
+                    avatar = info.get('uploader_url', '') # صورة البروفايل (أحياناً تضبط)
 
                     data.append({
                         'Title': info.get('title', 'No Title'),
@@ -114,10 +102,11 @@ def get_tiktok_data(urls):
                         'Link': url
                     })
             except Exception as e:
+                print(f"Error showing URL {url}: {e}")
                 pass
-            time.sleep(0.3)
+            time.sleep(0.3) # تسريع قليل
 
-    loading_container.empty()
+    loading_container.empty() # إخفاء شاشة التحميل
     return data
 
 # --- 3. القائمة الجانبية (Sidebar) ---
@@ -127,24 +116,8 @@ with st.sidebar:
     st.markdown("---")
     
     st.markdown("### 1️⃣ روابط الحملة")
+    raw_urls = st.text_area("ألصق الروابط هنا:", height=200, placeholder="https://www.tiktok.com/...")
     
-    # --- التعديل: نظام الخانات (+) بدلاً من النص ---
-    for i, link in enumerate(st.session_state['input_links']):
-        c1, c2 = st.columns([5, 1])
-        with c1:
-            st.session_state['input_links'][i] = st.text_input(f"رابط {i+1}", value=link, placeholder="https://tiktok.com/...", key=f"lnk_{i}", label_visibility="collapsed")
-        with c2:
-            if len(st.session_state['input_links']) > 1:
-                if st.button("✕", key=f"del_{i}"):
-                    remove_link(i)
-                    st.rerun()
-    
-    if st.button("➕ إضافة رابط", use_container_width=True):
-        add_link()
-        st.rerun()
-    # ---------------------------------------------
-    
-    st.markdown("---")
     st.markdown("### 2️⃣ تخصيص العرض")
     label_choice = st.radio("تسمية البارات بـ:", ("اسم الحساب (الظاهر)", "عنوان الفيديو"))
     y_axis_col = 'Display Name' if label_choice == "اسم الحساب (الظاهر)" else 'Title'
@@ -166,6 +139,7 @@ with st.sidebar:
 
 # --- 4. منطقة المحتوى الرئيسية ---
 
+# هيدر الصفحة مع صورة خلفية جمالية
 st.markdown("""
 <div style="background: linear-gradient(90deg, #000000, #2c3e50); padding: 30px; border-radius: 20px; color: white; margin-bottom: 30px; text-align: center;">
     <h1 style='margin:0; font-size: 42px;'>🚀 TikTok Campaign Pro Dashboard</h1>
@@ -173,139 +147,138 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# فلترة الروابط الفارغة
-valid_urls = [x for x in st.session_state['input_links'] if x.strip()]
 
-if valid_urls and analyze_btn:
-    if 'data_result' not in st.session_state or analyze_btn:
-        st.session_state['data_result'] = get_tiktok_data(valid_urls)
+if raw_urls and analyze_btn:
+    urls_list = [line.strip() for line in raw_urls.split('\n') if line.strip()]
+    if urls_list:
+        # سحب البيانات
+        data_result = get_tiktok_data(urls_list)
 
-if valid_urls and 'data_result' in st.session_state and st.session_state['data_result']:
-    df = pd.DataFrame(st.session_state['data_result'])
-    
-    # --- التعديل: إضافة جدول التحرير (Data Editor) ---
-    st.markdown('<div class="section-header">✏️ مراجعة وتعديل البيانات (خاصة المتابعين)</div>', unsafe_allow_html=True)
-    st.info("💡 يمكنك الضغط على أي خلية لتعديلها (مثلاً: إذا ظهر عدد المتابعين 0).")
-    
-    edited_df = st.data_editor(
-        df,
-        column_config={
-            "Followers": st.column_config.NumberColumn("المتابعين (عدل هنا)", required=True, min_value=0, format="%d"),
-            "Views": st.column_config.NumberColumn("المشاهدات", disabled=True),
-            "Color": st.column_config.SelectboxColumn("لون (للوضع اليدوي)", options=["Red", "Blue", "Green", "Gold", "Black", "#FF0050"], required=False)
-        },
-        use_container_width=True,
-        num_rows="dynamic",
-        hide_index=True
-    )
-    
-    # استخدام البيانات المعدلة للرسم والحسابات
-    df_final = edited_df.sort_values(by='Views', ascending=True)
-    
-    # ================= القسم الأول: نظرة عامة على الحملة (KPIs) =================
-    st.markdown('<div class="section-header">📊 ملخص أداء الحملة (Campaign Overview)</div>', unsafe_allow_html=True)
-    
-    total_views = df_final['Views'].sum()
-    total_likes = df_final['Likes'].sum()
-    total_shares = df_final['Shares'].sum()
-    avg_views = df_final['Views'].mean()
-
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    with kpi1:
-        st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">🔥 {total_views:,.0f}</div><div class="kpi-label">إجمالي المشاهدات</div></div>""", unsafe_allow_html=True)
-    with kpi2:
-        st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">❤️ {total_likes:,.0f}</div><div class="kpi-label">إجمالي الإعجابات</div></div>""", unsafe_allow_html=True)
-    with kpi3:
-        st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">↗️ {total_shares:,.0f}</div><div class="kpi-label">إجمالي المشاركات</div></div>""", unsafe_allow_html=True)
-    with kpi4:
-        st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">📈 {avg_views:,.0f}</div><div class="kpi-label">متوسط المشاهدات/فيديو</div></div>""", unsafe_allow_html=True)
-    
-    st.markdown("---")
-
-    # ================= القسم الثاني: تحليل صحة الحسابات =================
-    st.markdown('<div class="section-header">👥 تحليل الحسابات والمتابعين (Influencer Health)</div>', unsafe_allow_html=True)
-    
-    # استخدام البيانات المعدلة هنا أيضاً
-    accounts_df = df_final.drop_duplicates(subset=['Username']).copy()
-    total_reach = accounts_df['Followers'].sum() # سيحسب الرقم الصحيح بعد تعديلك
-
-    col_reach_summary, col_accounts_list = st.columns([1, 2])
-
-    with col_reach_summary:
-        st.markdown(f"""
-        <div style="background-color: #e3f2fd; padding: 20px; border-radius: 15px; text-align: center;">
-            <h3 style="color: #1565c0; margin:0;">إجمالي الوصول المحتمل<br>(Total Potential Reach)</h3>
-            <h1 style="color: #0d47a1; font-size: 48px; margin: 10px 0;">📢 {total_reach:,.0f}</h1>
-            <p style="color: #546e7a;">مجموع متابعي جميع الحسابات المشاركة (بعد التعديل).</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_accounts_list:
-        st.markdown("#### قائمة الحسابات المشاركة:")
-        st.dataframe(
-            accounts_df[['Display Name', 'Username', 'Followers']].sort_values(by='Followers', ascending=False),
-            column_config={
-                "Display Name": "الاسم الظاهر",
-                "Username": "اليوزرنيم",
-                "Followers": st.column_config.NumberColumn("عدد المتابعين", format="%d ⭐")
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-
-    st.markdown("---")
-
-    # ================= القسم الثالث: الرسم البياني =================
-    st.markdown('<div class="section-header">📈 تفاصيل أداء الفيديوهات (Performance Visuals)</div>', unsafe_allow_html=True)
-
-    final_fig = None
-    
-    if color_mode == "تخصيص يدوي (للتأكيد)":
-        if 'Color' not in df_final.columns: df_final['Color'] = "#FF0050"
-        df_final['Color'] = df_final['Color'].fillna("#FF0050")
+    if data_result:
+        df = pd.DataFrame(data_result)
+        df_sorted = df.sort_values(by='Views', ascending=True)
         
-        final_fig = px.bar(df_final, x='Views', y=y_axis_col, orientation='h', text='Views')
-        final_fig.update_traces(marker_color=df_final['Color'])
+        # ================= القسم الأول: نظرة عامة على الحملة (KPIs) =================
+        st.markdown('<div class="section-header">📊 ملخص أداء الحملة (Campaign Overview)</div>', unsafe_allow_html=True)
+        
+        # حساب الإجماليات
+        total_views = df['Views'].sum()
+        total_likes = df['Likes'].sum()
+        total_shares = df['Shares'].sum()
+        avg_views = df['Views'].mean()
 
-    elif color_mode == "لون موحد":
-        final_fig = px.bar(df_final, x='Views', y=y_axis_col, orientation='h', text='Views', hover_data=['Title', 'Username', 'Likes'])
-        final_fig.update_traces(marker_color=selected_color)
+        # عرض الـ KPIs في بطاقات مخصصة
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        with kpi1:
+            st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">🔥 {total_views:,.0f}</div><div class="kpi-label">إجمالي المشاهدات</div></div>""", unsafe_allow_html=True)
+        with kpi2:
+            st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">❤️ {total_likes:,.0f}</div><div class="kpi-label">إجمالي الإعجابات</div></div>""", unsafe_allow_html=True)
+        with kpi3:
+            st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">↗️ {total_shares:,.0f}</div><div class="kpi-label">إجمالي المشاركات</div></div>""", unsafe_allow_html=True)
+        with kpi4:
+            st.markdown(f"""<div class="kpi-card"><div class="kpi-metric">📈 {avg_views:,.0f}</div><div class="kpi-label">متوسط المشاهدات/فيديو</div></div>""", unsafe_allow_html=True)
+        
+        st.markdown("---")
 
-    elif color_mode == "ثيم متدرج احترافي":
-        final_fig = px.bar(df_final, x='Views', y=y_axis_col, orientation='h', text='Views', color='Views',
-                           color_continuous_scale=selected_theme, hover_data=['Title', 'Username', 'Likes'])
+        # ================= القسم الثاني: تحليل صحة الحسابات (الجديد!) =================
+        st.markdown('<div class="section-header">👥 تحليل الحسابات والمتابعين (Influencer Health)</div>', unsafe_allow_html=True)
+        
+        # تجميع البيانات حسب الحساب الفريد للحصول على المتابعين
+        accounts_df = df.drop_duplicates(subset=['Username']).copy()
+        total_reach = accounts_df['Followers'].sum()
 
-    if final_fig:
-        final_fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside', textfont_size=13)
-        final_fig.update_layout(
-            height=600,
-            yaxis={'categoryorder':'total ascending', 'title': None, 'tickfont': {'size': 14}},
-            xaxis={'title': None, 'showgrid': False, 'showticklabels': False},
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            showlegend=False,
-            margin=dict(l=20, r=20, t=20, b=20),
-            font=dict(family="Helvetica, Arial, sans-serif", size=12, color="#333")
-        )
-        st.plotly_chart(final_fig, use_container_width=True)
+        col_reach_summary, col_accounts_list = st.columns([1, 2])
 
-    # ================= القسم الرابع: التصدير =================
-    st.markdown("---")
-    col_export_text, col_export_btn = st.columns([3, 1])
-    with col_export_text:
-         st.markdown("### 💾 تصدير البيانات الشاملة")
-         st.caption("قم بتحميل ملف Excel يحتوي على كافة التفاصيل (المشاهدات، اللايكات، المتابعين، الروابط).")
-    with col_export_btn:
-        csv = df_final.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="⬇️ تحميل تقرير Excel",
-            data=csv,
-            file_name="tiktok_pro_campaign_report.csv",
-            mime="text/csv",
-            type="primary",
-            use_container_width=True
-        )
+        with col_reach_summary:
+            st.markdown(f"""
+            <div style="background-color: #e3f2fd; padding: 20px; border-radius: 15px; text-align: center;">
+                <h3 style="color: #1565c0; margin:0;">إجمالي الوصول المحتمل<br>(Total Potential Reach)</h3>
+                <h1 style="color: #0d47a1; font-size: 48px; margin: 10px 0;">📢 {total_reach:,.0f}</h1>
+                <p style="color: #546e7a;">مجموع متابعي جميع الحسابات الفريدة في الحملة.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-elif not valid_urls and not analyze_btn:
-    st.info("👋 مرحباً! ابدأ بلصق روابط حملة التيك توك في القائمة الجانبية.")
+        with col_accounts_list:
+            st.markdown("#### قائمة الحسابات المشاركة:")
+            # عرض جدول بسيط ونظيف للحسابات ومتابعيهم
+            st.dataframe(
+                accounts_df[['Display Name', 'Username', 'Followers']].sort_values(by='Followers', ascending=False),
+                column_config={
+                    "Display Name": "الاسم الظاهر",
+                    "Username": "اليوزرنيم",
+                    "Followers": st.column_config.NumberColumn("عدد المتابعين", format="%d ⭐")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+
+        st.markdown("---")
+
+        # ================= القسم الثالث: الرسم البياني للأداء (البارات) =================
+        st.markdown('<div class="section-header">📈 تفاصيل أداء الفيديوهات (Performance Visuals)</div>', unsafe_allow_html=True)
+
+        final_fig = None
+        
+        # منطق التلوين (كما طلبته سابقاً)
+        if color_mode == "تخصيص يدوي (للتأكيد)":
+            st.info("💡 استخدم الجدول أدناه لتحديد لون خاص لكل فيديو.")
+            edit_df = df.copy().sort_values(by='Views', ascending=False)
+            if 'Color' not in edit_df.columns: edit_df['Color'] = 'Gray'
+            
+            edited_data = st.data_editor(
+                edit_df[[y_axis_col, 'Views', 'Color']],
+                column_config={
+                    "Color": st.column_config.SelectboxColumn("اختر اللون", options=["Red", "Blue", "Green", "Gold", "Black", "Gray", "Pink", "#FF0050"], required=True, width="medium"),
+                    "Views": st.column_config.NumberColumn("المشاهدات", disabled=True, format="%d"),
+                    y_axis_col: st.column_config.TextColumn("الاسم", disabled=True)
+                },
+                use_container_width=True, hide_index=True
+            )
+            final_fig = px.bar(edited_data, x='Views', y=y_axis_col, orientation='h', text='Views')
+            final_fig.update_traces(marker_color=edited_data['Color'])
+
+        elif color_mode == "لون موحد":
+            final_fig = px.bar(df_sorted, x='Views', y=y_axis_col, orientation='h', text='Views', hover_data=['Title', 'Username', 'Likes'])
+            final_fig.update_traces(marker_color=selected_color)
+
+        elif color_mode == "ثيم متدرج احترافي":
+            final_fig = px.bar(df_sorted, x='Views', y=y_axis_col, orientation='h', text='Views', color='Views',
+                               color_continuous_scale=selected_theme, hover_data=['Title', 'Username', 'Likes'])
+
+        # تنسيق الرسم البياني ليكون نظيفاً جداً داخل البطاقة
+        if final_fig:
+            final_fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside', textfont_size=13)
+            final_fig.update_layout(
+                height=600,
+                yaxis={'categoryorder':'total ascending', 'title': None, 'tickfont': {'size': 14}},
+                xaxis={'title': None, 'showgrid': False, 'showticklabels': False}, # إخفاء المحور السيني
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                margin=dict(l=20, r=20, t=20, b=20),
+                font=dict(family="Helvetica, Arial, sans-serif", size=12, color="#333")
+            )
+            # عرض الرسم داخل حاوية بيضاء (البطاقة)
+            st.plotly_chart(final_fig, use_container_width=True)
+
+        # ================= القسم الرابع: التصدير =================
+        st.markdown("---")
+        col_export_text, col_export_btn = st.columns([3, 1])
+        with col_export_text:
+             st.markdown("### 💾 تصدير البيانات الشاملة")
+             st.caption("قم بتحميل ملف Excel يحتوي على كافة التفاصيل (المشاهدات، اللايكات، المتابعين، الروابط).")
+        with col_export_btn:
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ تحميل تقرير Excel",
+                data=csv,
+                file_name="tiktok_pro_campaign_report.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+
+elif not raw_urls and not analyze_btn:
+    # رسالة ترحيبية عند فتح الصفحة
+    st.info("👋 مرحباً! ابدأ بلصق روابط حملة التيك توك في القائمة الجانبية لإنشاء الداشبورد.")
     st.image("https://cdn.dribbble.com/users/2057731/screenshots/16924739/media/67111394872296129441942d04010026.png?resize=800x600&vertical=center", use_container_width=True)
