@@ -5,9 +5,10 @@ import plotly.express as px
 import time
 
 # --- إعدادات الصفحة ---
-st.set_page_config(page_title="محلل حملات تيك توك", layout="wide")
+st.set_page_config(page_title="Pro TikTok Analytics", layout="wide", page_icon="📊")
 
-# --- الدالة الأساسية لسحب البيانات ---
+# --- دالة سحب البيانات ---
+@st.cache_data(show_spinner=False) # تخزين مؤقت عشان لو غير اللون ما يعيد التحميل
 def get_tiktok_data(urls):
     ydl_opts = {
         'quiet': True,
@@ -18,124 +19,138 @@ def get_tiktok_data(urls):
     
     data = []
     
-    # شريط التقدم في الواجهة
-    progress_bar = st.progress(0)
+    # مكان شريط التقدم
+    progress_container = st.empty()
+    progress_bar = progress_container.progress(0)
     status_text = st.empty()
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         for i, url in enumerate(urls):
-            # تحديث شريط التقدم
             progress = (i + 1) / len(urls)
             progress_bar.progress(progress)
-            status_text.text(f"جاري تحليل الرابط {i+1} من {len(urls)}...")
+            status_text.caption(f"جاري تحليل الرابط {i+1} من {len(urls)}... ⏳")
             
             try:
                 info = ydl.extract_info(url, download=False)
                 if info:
                     data.append({
                         'Title': info.get('title', 'No Title'),
-                        'Display Name': info.get('uploader', 'Unknown'), # الاسم المكتوب (اللقب)
-                        'Username': info.get('uploader_id', 'Unknown'),  # اليوزرنيم (للمرجع فقط)
+                        'Display Name': info.get('uploader', 'Unknown'),
+                        'Username': info.get('uploader_id', 'Unknown'),
                         'Views': info.get('view_count', 0),
                         'Link': url
                     })
             except Exception:
-                pass # تجاهل الروابط الخربانة
+                pass
             
-            time.sleep(0.5) 
+            time.sleep(0.5)
 
-    progress_bar.empty()
+    progress_container.empty() # إخفاء الشريط بعد الانتهاء
     status_text.empty()
     return data
 
-# --- واجهة التطبيق ---
-st.title("📊 تقرير حملة تيك توك الإعلانية")
-st.markdown("---")
-
-# 1. القائمة الجانبية للإدخال
+# --- القائمة الجانبية (لوحة التحكم) ---
 with st.sidebar:
-    st.header("إعدادات التقرير")
+    st.image("https://cdn-icons-png.flaticon.com/512/3046/3046121.png", width=50)
+    st.title("إعدادات التقرير")
     
-    # مكان لصق الروابط
-    raw_urls = st.text_area("الصق روابط تيك توك هنا (رابط في كل سطر):", height=300)
+    st.markdown("### 1️⃣ البيانات")
+    raw_urls = st.text_area("الصق الروابط هنا:", height=200, placeholder="https://www.tiktok.com/...")
     
-    # خيار التصنيف
+    st.markdown("### 2️⃣ التخصيص (Thmeming)")
+    # ميزة اختيار اللون
+    chart_color = st.color_picker("اختر لون هوية العميل:", "#E91E63") 
+    
     label_choice = st.radio(
-        "عرض الرسم البياني بناءً على:",
+        "تسمية البارات بـ:",
         ("اسم الحساب (Display Name)", "عنوان الفيديو (Title)")
     )
     
-    analyze_btn = st.button("🚀 استخراج التقرير", type="primary")
+    analyze_btn = st.button("🚀 إنشاء التقرير الشامل", type="primary")
 
-# 2. منطقة العرض الرئيسية
+# --- منطقة العرض الرئيسية ---
+st.header("📊 لوحة تحليلات حملة تيك توك")
+st.caption("تقرير أداء تفاعلي")
+st.markdown("---")
+
 if analyze_btn and raw_urls:
     urls_list = [line.strip() for line in raw_urls.split('\n') if line.strip()]
     
     if urls_list:
-        with st.spinner('جاري الاتصال بسيرفرات تيك توك وسحب الأرقام...'):
+        with st.spinner('جاري جلب البيانات وتحليل الأرقام...'):
             results = get_tiktok_data(urls_list)
         
         if results:
             df = pd.DataFrame(results)
+            df = df.sort_values(by='Views', ascending=True) # ترتيب للرسم
             
-            # الترتيب: الأكثر مشاهدة يكون تحت في الداتا فريم عشان يطلع فوق في الرسم (لأن الرسم يبدأ من تحت)
-            # أو نستخدم المنطق المباشر ونرتب الرسم نفسه
-            df = df.sort_values(by='Views', ascending=True)
-            
-            # --- عرض الإجماليات ---
+            # --- 1. قسم الأرقام القياسية (KPIs) ---
             total_views = df['Views'].sum()
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric(label="إجمالي المشاهدات للحملة 🔥", value=f"{total_views:,}")
-            with col2:
-                st.metric(label="عدد الفيديوهات", value=len(df))
-            with col3:
-                top_video = df.iloc[-1]
-                st.metric(label="أعلى فيديو مشاهدة", value=f"{top_video['Views']:,}")
-
+            avg_views = df['Views'].mean()
+            top_video = df.iloc[-1]
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("إجمالي المشاهدات 🔥", f"{total_views:,.0f}")
+            c2.metric("متوسط المشاهدات 📈", f"{avg_views:,.0f}")
+            c3.metric("عدد المقاطع 🎬", len(df))
+            c4.metric("الأعلى أداءً 🏆", f"{top_video['Views']:,}")
+            
             st.markdown("---")
 
-            # --- الرسم البياني ---
-            st.subheader("📈 أداء الفيديوهات (الأكثر مشاهدة)")
+            # --- 2. الرسم البياني الرئيسي (البارات) ---
+            col_main, col_pie = st.columns([2, 1]) # تقسيم الشاشة ثلثين وثلث
             
-            # تحديد المحور الصادي
-            if label_choice == "اسم الحساب (Display Name)":
-                y_axis = 'Display Name' # هنا نستخدم الاسم المكتوب
-            else:
-                y_axis = 'Title'
-            
-            fig = px.bar(
-                df, 
-                x='Views', 
-                y=y_axis, 
-                orientation='h',
-                text='Views',
-                color='Views',
-                color_continuous_scale='Viridis',
-                hover_data=['Title', 'Display Name', 'Username', 'Views'] # يطلع لك اليوزرنيم كمان لما تحط الماوس
-            )
-            
-            fig.update_traces(texttemplate='%{text:,}', textposition='outside')
-            fig.update_layout(
-                height=600, 
-                showlegend=False,
-                yaxis={'categoryorder':'total ascending'} # يضمن ترتيب الأكثر فوق
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-
-            # --- عرض الجدول التفصيلي ---
-            with st.expander("عرض الجدول التفصيلي للبيانات"):
-                # نعرض الجدول مرتب من الأكثر للأقل، ونحط الأعمدة المهمة
-                st.dataframe(
-                    df.sort_values(by='Views', ascending=False)
-                    [['Display Name', 'Username', 'Views', 'Title', 'Link']]
+            with col_main:
+                st.subheader("أداء الفيديوهات")
+                
+                y_axis = 'Display Name' if label_choice == "اسم الحساب (Display Name)" else 'Title'
+                
+                fig_bar = px.bar(
+                    df, x='Views', y=y_axis, orientation='h', text='Views',
+                    hover_data=['Title', 'Username']
                 )
                 
-        else:
-            st.error("لم يتم العثور على بيانات. تأكد من صحة الروابط.")
-    else:
-        st.warning("الرجاء وضع روابط أولاً.")
+                # تطبيق لون العميل المختار
+                fig_bar.update_traces(marker_color=chart_color, texttemplate='%{text:,}', textposition='outside')
+                fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, height=500)
+                
+                st.plotly_chart(fig_bar, use_container_width=True)
 
-elif analyze_btn and not raw_urls:
-    st.warning("فضلاً الصق الروابط في الخانة الجانبية.")
+            # --- 3. الرسم الدائري (جديد: حصة المشاهدات) ---
+            with col_pie:
+                st.subheader("حصة المشاهدات (Share)")
+                # تجميع البيانات حسب الحساب عشان نعرف مين المسيطر
+                pie_df = df.groupby('Display Name')['Views'].sum().reset_index()
+                
+                fig_pie = px.pie(
+                    pie_df, values='Views', names='Display Name',
+                    hole=0.4 # عشان يصير شكلها دونات
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                fig_pie.update_layout(showlegend=False, height=500)
+                
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            # --- 4. جدول البيانات والتصدير ---
+            st.markdown("### 📋 تفاصيل البيانات")
+            
+            # ترتيب الجدول من الأكثر للأقل
+            df_display = df.sort_values(by='Views', ascending=False)
+            st.dataframe(df_display, use_container_width=True)
+            
+            # زر التحميل (CSV)
+            csv = df_display.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="💾 تحميل التقرير (Excel/CSV)",
+                data=csv,
+                file_name='tiktok_campaign_report.csv',
+                mime='text/csv',
+            )
+            
+        else:
+            st.error("لم يتم العثور على بيانات.")
+    else:
+        st.warning("الرجاء إدخال روابط صحيحة.")
+
+elif not raw_urls:
+    st.info("👈 ابدأ بلصق الروابط في القائمة الجانبية واضغط زر الإنشاء.")
