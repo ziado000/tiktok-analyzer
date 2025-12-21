@@ -1,4 +1,6 @@
 streamlit
 yt-dlp
 pandas
+
 plotly
+openpyxl
