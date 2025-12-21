@@ -7,19 +7,17 @@ import time
 from io import BytesIO
 import math
 
-# -----------------------
-# Force Plotly to use Kaleido (fixes "kaleido installed but not working")
-# -----------------------
-# If Kaleido is installed, this makes Plotly reliably export PNGs for printing.
+# =======================
+# Force Plotly -> Kaleido
+# =======================
 try:
     pio.kaleido.scope.default_format = "png"
     pio.kaleido.scope.default_scale = 2
 except Exception:
-    # If kaleido isn't actually available to Plotly runtime, this may fail.
     pass
 
 # =======================
-# 1) Page config + CSS
+# Page config + CSS
 # =======================
 st.set_page_config(page_title="TikTok Campaign Pro Dashboard", layout="wide", page_icon="🚀")
 
@@ -48,7 +46,6 @@ st.markdown("""
     .kpi-metric { font-size: 32px; font-weight: 800; color: #E91E63; }
     .kpi-label { font-size: 14px; color: #666; margin-top: 5px; }
 
-    /* PRINT */
     @media print {
         section[data-testid="stSidebar"] { display: none !important; }
         .stButton, div[data-testid="stStatusWidget"], header { display: none !important; }
@@ -97,7 +94,6 @@ def fmt_followers(v) -> str:
     return f"{v}"
 
 def pick_followers(info: dict):
-    # TikTok follower counts are often unavailable via yt_dlp (best-effort only)
     candidates = ["channel_follower_count", "uploader_follower_count", "follower_count", "followers"]
     for k in candidates:
         v = info.get(k)
@@ -126,12 +122,8 @@ def chunk_df(df: pd.DataFrame, chunk_size: int):
         yield df.iloc[start:start + chunk_size], start // chunk_size + 1
 
 def make_excel_or_csv(df_export: pd.DataFrame):
-    """
-    Excel requires openpyxl. If missing in deployment, fallback to a clean UTF-8-SIG CSV.
-    """
     try:
         import openpyxl  # noqa: F401
-
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df_export.to_excel(writer, index=False, sheet_name="Report")
@@ -142,19 +134,18 @@ def make_excel_or_csv(df_export: pd.DataFrame):
         csv = df_export.to_csv(index=False).encode("utf-8-sig")
         return ("csv", csv, "tiktok_campaign_report.csv", "text/csv")
 
-def fig_to_png_bytes(fig) -> bytes | None:
+def fig_to_png_bytes(fig) -> tuple[bytes | None, str | None]:
     """
-    Convert Plotly fig -> PNG bytes (print-safe).
-    This requires kaleido to be available to Plotly.
+    Returns (png_bytes, error_message). If Chrome missing, returns None with error msg.
     """
     try:
-        return fig.to_image(format="png", scale=2)
+        png = fig.to_image(format="png", scale=2)
+        return png, None
     except Exception as e:
-        st.error(f"Kaleido/Plotly PNG export failed: {e}")
-        return None
+        return None, str(e)
 
 # =======================
-# 2) Data fetch
+# Data fetch
 # =======================
 @st.cache_data(show_spinner=False)
 def get_tiktok_data(urls):
@@ -182,7 +173,7 @@ def get_tiktok_data(urls):
                         "Views": safe_int(info.get("view_count"), 0),
                         "Likes": safe_int(info.get("like_count"), 0),
                         "Shares": safe_int(info.get("repost_count"), 0),
-                        "Followers": pick_followers(info),  # None if unavailable
+                        "Followers": pick_followers(info),
                         "Link": url
                     })
             except Exception:
@@ -194,7 +185,7 @@ def get_tiktok_data(urls):
     return data
 
 # =======================
-# 3) Sidebar
+# Sidebar
 # =======================
 with st.sidebar:
     st.title("⚙️ إعدادات الداشبورد")
@@ -213,7 +204,7 @@ with st.sidebar:
     print_mode = st.toggle(
         "🖨️ Print Mode (أفضل للطباعة PDF)",
         value=True,
-        help="يستخدم صور PNG بدل الرسم التفاعلي لضمان ظهور كل الصفحات عند Ctrl+P."
+        help="يستخدم صور PNG بدل الرسم التفاعلي (لكن يحتاج Chrome/Chromium داخل السيرفر)."
     )
 
     selected_theme = "Viridis"
@@ -226,10 +217,10 @@ with st.sidebar:
 
     st.markdown("---")
     analyze_btn = st.button("🚀 إنشاء التقرير", type="primary", use_container_width=True)
-    st.info("💡 للطباعة: Ctrl + P ثم Save as PDF. (مع Print Mode النتائج أفضل)")
+    st.info("💡 للطباعة: Ctrl + P ثم Save as PDF. (مع Print Mode النتائج أفضل إذا Chrome موجود)")
 
 # =======================
-# 4) Main header
+# Main header
 # =======================
 st.markdown("""
 <div style="background: linear-gradient(90deg, #000000, #2c3e50); padding: 30px; border-radius: 20px; color: white; margin-bottom: 30px; text-align: center;">
@@ -239,7 +230,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =======================
-# 5) Run analysis
+# Run analysis
 # =======================
 if analyze_btn and raw_urls:
     urls_list = [line.strip() for line in raw_urls.split("\n") if line.strip()]
@@ -255,7 +246,7 @@ if analyze_btn and raw_urls:
             df = pd.DataFrame(data_result)
             df_sorted = df.sort_values(by="Views", ascending=True).copy()
 
-            # ---------------- KPIs ----------------
+            # KPIs
             st.markdown('<div class="section-header">📊 ملخص الأداء (Overview)</div>', unsafe_allow_html=True)
             k1, k2, k3, k4, k5 = st.columns(5)
             k1.markdown(f"""<div class="kpi-card"><div class="kpi-metric">🔥 {df['Views'].sum():,.0f}</div><div class="kpi-label">المشاهدات</div></div>""", unsafe_allow_html=True)
@@ -263,10 +254,9 @@ if analyze_btn and raw_urls:
             k3.markdown(f"""<div class="kpi-card"><div class="kpi-metric">↗️ {df['Shares'].sum():,.0f}</div><div class="kpi-label">المشاركات</div></div>""", unsafe_allow_html=True)
             k4.markdown(f"""<div class="kpi-card"><div class="kpi-metric">📈 {df['Views'].mean():,.0f}</div><div class="kpi-label">متوسط/فيديو</div></div>""", unsafe_allow_html=True)
             k5.markdown(f"""<div class="kpi-card"><div class="kpi-metric">🎬 {len(df):,.0f}</div><div class="kpi-label">عدد الفيديوهات</div></div>""", unsafe_allow_html=True)
-
             st.markdown("---")
 
-            # ---------------- Labels with followers ----------------
+            # Labels
             st.markdown('<div class="section-header">📈 تحليل الفيديوهات (Performance Chart)</div>', unsafe_allow_html=True)
 
             base_label_col = "Display Name" if label_choice == "اسم الحساب" else "Title"
@@ -284,7 +274,7 @@ if analyze_btn and raw_urls:
                 axis=1
             )
 
-            # ---------------- Chunked charts (multi-page printing) ----------------
+            # Chunk charts
             CHUNK_SIZE = 20
             total_chunks = math.ceil(len(df_sorted) / CHUNK_SIZE)
 
@@ -292,43 +282,13 @@ if analyze_btn and raw_urls:
                 if color_mode == "لون موحد":
                     fig = px.bar(dfx, x="Views", y="Linked_Label", orientation="h", text="Views")
                     fig.update_traces(marker_color=selected_color)
-
                 elif color_mode == "تخصيص يدوي":
-                    st.info("⚠️ التخصيص اليدوي قد يلغي خاصية الروابط في الرسم.")
-                    edit_df = dfx.copy().sort_values(by="Views", ascending=False)
-                    if "Color" not in edit_df.columns:
-                        edit_df["Color"] = "Gray"
-
-                    edited_data = st.data_editor(
-                        edit_df[[base_label_col, "Views", "Followers", "Color"]],
-                        column_config={
-                            "Color": st.column_config.SelectboxColumn(
-                                "اللون",
-                                options=["Red", "Blue", "Green", "#FF0050", "Gray"],
-                                required=True
-                            ),
-                            "Views": st.column_config.NumberColumn("المشاهدات", disabled=True),
-                            "Followers": st.column_config.NumberColumn("المتابعين", disabled=True),
-                        },
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    tmp = edited_data.copy()
-                    tmp["FollowersFmt"] = tmp["Followers"].apply(fmt_followers)
-                    tmp["YLabel"] = tmp.apply(lambda r: f"{r[base_label_col]}  •  👥 {r['FollowersFmt']}", axis=1)
-                    fig = px.bar(tmp, x="Views", y="YLabel", orientation="h", text="Views")
-                    fig.update_traces(marker_color=tmp["Color"])
-
+                    # For print mode, manual editor is annoying; keep it simple:
+                    fig = px.bar(dfx, x="Views", y="Linked_Label", orientation="h", text="Views")
                 else:
                     fig = px.bar(
-                        dfx,
-                        x="Views",
-                        y="Linked_Label",
-                        orientation="h",
-                        text="Views",
-                        color="Views",
-                        color_continuous_scale=selected_theme
+                        dfx, x="Views", y="Linked_Label", orientation="h", text="Views",
+                        color="Views", color_continuous_scale=selected_theme
                     )
 
                 fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
@@ -341,17 +301,31 @@ if analyze_btn and raw_urls:
                 )
                 return fig
 
-            # Debug status for Kaleido availability
-            st.caption(f"Kaleido available to Plotly: {getattr(pio, 'kaleido', None) is not None and getattr(pio.kaleido, 'scope', None) is not None}")
+            chrome_missing_warned = False
 
             for chunk, idx in chunk_df(df_sorted, CHUNK_SIZE):
                 fig = build_fig(chunk)
 
                 if print_mode:
-                    png = fig_to_png_bytes(fig)
+                    png, err = fig_to_png_bytes(fig)
                     if png is None:
-                        st.warning("لم نستطع إنشاء PNG للرسم. تأكد أن kaleido مثبت ومتوافق مع plotly في بيئتك.")
-                        st.plotly_chart(fig, use_container_width=True)
+                        # Chrome missing -> fallback to table so printing still works across pages
+                        if (not chrome_missing_warned) and err:
+                            chrome_missing_warned = True
+                            st.error(
+                                "❌ Print Mode يحتاج Chrome/Chromium داخل السيرفر.\n\n"
+                                "✅ إذا على Streamlit Cloud: أنشئ ملف packages.txt وضع فيه:\n"
+                                "chromium\nchromium-driver\n\n"
+                                "ثم اعمل Reboot.\n\n"
+                                f"تفاصيل الخطأ: {err}"
+                            )
+                        st.dataframe(
+                            chunk.sort_values("Views", ascending=False)[
+                                ["LabelText", "Views", "Likes", "Shares", "Followers", "Link"]
+                            ],
+                            use_container_width=True,
+                            hide_index=True
+                        )
                     else:
                         st.image(png, use_container_width=True)
                 else:
@@ -360,12 +334,11 @@ if analyze_btn and raw_urls:
                 if idx < total_chunks:
                     st.markdown('<div class="page-break"></div>', unsafe_allow_html=True)
 
-            # ---------------- Table + Export ----------------
+            # Table + Export
             st.markdown("---")
             st.markdown('<div class="section-header">💾 البيانات التفصيلية</div>', unsafe_allow_html=True)
             st.dataframe(df, use_container_width=True, hide_index=True)
 
-            # Export clean df (no html columns)
             df_export = df.copy()
             kind, data_bytes, fname, mime = make_excel_or_csv(df_export)
 
